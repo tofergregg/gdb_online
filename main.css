@@ -1,0 +1,52 @@
+.smallcaps {
+	font-variant: small-caps;
+	color:white;
+}
+
+#activation_records
+{
+	float: left;
+	width: 172px;
+	height: 464px;
+	top: 23px;
+	left: 461px;
+	position: absolute;
+	background-color: #C00000;
+}
+#run_options
+{
+	float: left;
+	width: 447px;
+	height: 118px;
+	top: 23px;
+	left: 12px;
+	position: absolute;
+	background-color: #C00000;
+}
+#code_window
+{
+	float: left;
+	width: 447px;
+	height: 223px;
+	top: 143px;
+	left: 12px;
+	position: absolute;
+	background-color: #C00000;
+}
+#console
+{
+	float: left;
+	width: 447px;
+	height: 118px;
+	top: 368px;
+	left: 12px;
+	position: absolute;
+	background-color: #C00000;
+}
+
+textarea{
+   height: 10px;
+   width: 90%;
+   padding:10%;
+   border:2px;
+}

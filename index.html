@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>C++ Activation Records</title>
+<link rel="stylesheet" href="main.css">
+
+<meta charset="utf-8">
+<meta name="description" content="Demo of a simple 2 column css layout" />
+
+<script LANGUAGE="JavaScript" SRC="simpleText.js"></script>
+
+</head>
+
+<body>
+<div class="smallcaps" id="run_options">Compile</div><!-- #node4 end -->
+<div class="smallcaps" id="activation_records">Activation Records</div><!-- #node2 end -->
+<div id="code_window" style="overflow:auto;"><span class="smallcaps">Code</span></div><!-- #node5 end -->
+<script>
+var editor = new SimpleText(document.getElementById("code_window"));
+editor.setCode("#include&ltiostream>\nusing namespace std;\nint main() {\n  cout << \"Hello, World!\\n\");\n  return 0;\n}");
+</script>
+<div id="console" style="overflow:auto;"><span class="smallcaps">Console<br></span>
+</div><!-- #node6 end -->
+<script>
+var editor = new SimpleTextNoLineNumbers(document.getElementById("console"));
+</script>
+
+</body>
+</html>
