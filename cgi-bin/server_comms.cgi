@@ -14,8 +14,8 @@ if __name__ == "__main__":
 	form = cgi.FieldStorage()
 	try:
 	    uuid=form['uuid'].value
-	    command=form['c!ommand'].value
-	    data=form['d!ata'].value
+	    command=form['command'].value
+	    data=form['data'].value
 	except:
 	    if len(sys.argv) != 4:
 	    	print "Content-type:text/html\n" 

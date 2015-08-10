@@ -12,10 +12,11 @@ import threading
 BUF_LEN = 1024
 IP_ADDR = "130.64.23.165"
 PORT_NUM = 55444
-	
+GDB_WARNING="warning: GDB: Failed to set controlling terminal: Operation not permitted\r\n"
+
 class Gdb_session:
 	ON_POSIX = 'posix' in sys.builtin_module_names
-	
+
 	def __init__(self,program_name):
 		program_pts,self.program_fd = self.set_pty_for_gdb()
 		self.p = subprocess.Popen(['gdb',program_name], stdout=subprocess.PIPE, stdin=subprocess.PIPE,
@@ -27,10 +28,10 @@ class Gdb_session:
 		fl = fcntl.fcntl(self.p.stderr, fcntl.F_GETFL)
 		fcntl.fcntl(self.p.stderr, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
-		# make stdin non-blocking 
+		# make stdin non-blocking
 		fl = fcntl.fcntl(sys.stdin, fcntl.F_GETFL)
 		fcntl.fcntl(sys.stdin, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-		
+
 		# set gdb listsize to 10000 to always get all output
 		self.send_command(self.p,'set listsize 10000')
 		self.send_command(self.p,'set pagination off')
@@ -38,18 +39,17 @@ class Gdb_session:
 		self.read_gdb_output(self.p) # ignore
 
 		self.set_func_breakpoints(self.p)
-	
+
 		# set pts
 		self.send_command(self.p,'tty '+program_pts)
-	
+
 		# start running program
 		self.send_command(self.p,'run')
 		time.sleep(0.5) # wait a bit
-		#return '<_gdb_>'+self.read_gdb_output(self.p)+'</_gdb_>'
 
 	def send_command(self,proc,cmd):
 		proc.stdin.write(cmd+'\n')
-	
+
 	def read_gdb_output(self,proc):
 		lines = ""
 		while 1:
@@ -59,7 +59,7 @@ class Gdb_session:
 			except IOError:
 				break # no output
 			lines+=c
-		# read from stdout 
+		# read from stdout
 		while 1:
 			try:
 				c=proc.stdout.read(1)
@@ -70,10 +70,10 @@ class Gdb_session:
 
 	def send_prog_input(self,fd,text):
 		os.write(fd,text+'\n')
-	
+
 	def read_prog_output(self,fd):
 		lines = ""
-		# read from stdout 
+		# read from stdout
 		while 1:
 			try:
 				c=os.read(fd,1)
@@ -81,7 +81,7 @@ class Gdb_session:
 				break # no output
 			lines+=c
 		return lines
-		
+
 	def set_func_breakpoints(self,p):
 		# get a list of all functions (it's going to be big...
 		self.send_command(p,'info functions')
@@ -91,52 +91,52 @@ class Gdb_session:
 		# just grab the first file, and turn into list of functions
 		all_funcs = all_funcs.split('File ')[1]
 		all_funcs = all_funcs.split('\n')[1:-2]
-	
+
 		# just strip out the definition, without the return type and without the semicolon
 		all_funcs = [x.split(' ')[1] for x in all_funcs]
 		all_funcs = [x.split(';')[0] for x in all_funcs]
-	
+
 		#print all_funcs
-	
+
 		# find the line number for each function
 		# first, set the listsize so we only get one line
 		self.send_command(p,'set listsize 1')
 		time.sleep(0.1)
 		self.read_gdb_output(p)
-	
+
 		# get a list of the function lines
 		func_lines=[]
 		for func in all_funcs:
 			self.send_command(p,'list '+func)
 			time.sleep(0.2)
 			response = self.read_gdb_output(p)
-			
+
 			# split on tab to get just the line number
 			response = response.split('\t')[0]
 			func_lines.append(response)
-	
+
 		# set breakpoints for each function
 		for func in func_lines:
 			self.send_command(p,'b '+func)
-	
+
 		# get response
 		time.sleep(0.2)
 		self.read_gdb_output(p)
-	
+
 	def set_pty_for_gdb(self):
 		# sets up a pseudo-terminal that GDB can write to and read from
 		# returns a tuple with the terminal tty to send to gdb, and the file
 		# descriptor to use for reading/writing with os
-	
+
 		pid,fd = pty.fork() # returns a tuple with (pid,file descriptor)
 		if pid==0: # forked process, which we want to just hang out to be controlled by GDB
 			# just wait forever
 			while 1:
 				time.sleep(1000)
-	
+
 		ps_output = subprocess.Popen(['ps','-A'],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
 		ps_stdout,ps_stderr = ps_output.communicate()
-	
+
 		# find our pts by pid (would look for "tty" on mac, but it is pts on linux)
 		ps_stdout = ps_stdout.split('\n') # split into lines
 		for line in ps_stdout:
@@ -154,7 +154,7 @@ class Gdb_session:
 
 		#print pts
 		return pts,fd
-		
+
 	def send_to_gdb(self,cmd_type,command):
 		try:
 			# command can be to either gdb or to the program, and
@@ -171,24 +171,28 @@ class Gdb_session:
 				return "did not send command"
 		except EOFError:
 			return "Cannot send command."
-			
+
 	def get_output(self):
 		# read gdb output
 		gdb_output = self.read_gdb_output(self.p)
 
 		# look for output from the program
 		prog_output = self.read_prog_output(self.program_fd)
-		
+
 		return {'gdb':gdb_output,'console':prog_output}
 
 class Gdb_sessions:
 	def __init__(self):
 		self.sessions = {}
-	
+
 	def create_session(self,uuid,program_name):
 		self.sessions[uuid]=Gdb_session(program_name)
-		return self.sessions[uuid].get_output()
-		
+		session_start_output = self.sessions[uuid].get_output()
+		# remove pesky gdb warning about the console
+		cons_output = session_start_output['console']
+		session_start_output['console'] = cons_output.replace(GDB_WARNING,'',1)
+		return session_start_output
+
 	def send_command_to_session(self,uuid,command,data):
 		if command == 'load':
 			# no uuid yet, data should hold program name
@@ -197,7 +201,7 @@ class Gdb_sessions:
 		if not self.sessions.has_key(uuid):
 			return {'error':"uuid does not have associated gdb instance."}
 		session = self.sessions[uuid]
-		
+
 		if command == 'gdb_command':
 			if session.send_to_gdb('g',data) == 'ok':
 				time.sleep(0.3) # wait for processing
@@ -207,7 +211,7 @@ class Gdb_sessions:
 				time.sleep(0.3) # wait for processing
 				return session.get_output()
 		return {'error':"no command"}
-		
+
 def handle_connection(gs,connection,address):
 	#uuid,program_name=sys.argv[1],sys.argv[2]
 	# get the data from the connection
@@ -216,6 +220,11 @@ def handle_connection(gs,connection,address):
 		buf = connection.recv(BUF_LEN)
 		if len(buf) > 0:
 		    full_msg = json.loads(buf) # a dict with uuid, command, and data
+		    print "Command:"
+		    print "\tuuid:",full_msg['uuid']
+		    print "\tcommand:",full_msg['command']
+		    print "\tdata:",full_msg['data']
+		    
 		    response = gs.send_command_to_session(full_msg['uuid'],
 		    					full_msg['command'],
 		    					full_msg['data'])
@@ -235,6 +244,3 @@ if __name__ == "__main__":
 	    connection, address = serversocket.accept()
 	    t = threading.Thread(target=handle_connection,args=(gs,connection,address))
 	    t.start()
-		
-		
-
