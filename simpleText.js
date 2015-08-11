@@ -27,6 +27,11 @@ Ends a line no matter what: br
 Starts a line if a line exists: p div
 */
 
+function escapeToHtml(text){
+	return text.replace(/&/g, "&amp;").replace(/>/g, "&gt;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+}
+
+
 function htmlToText(html) {
 	parts = html.split(/(<[^>]+>)/);
 	var text = "";
@@ -120,6 +125,8 @@ function SimpleText(appendTo) {
 		return text;
 	}
 	this.setCode = function(text) {
+		// escape text
+		text = escapeToHtml(text)
 		if (navigator.userAgent.indexOf('IE') >= 0) {
 			// IE: <P>line</P>, blank = <P>&nbps;</P>
 			text = text.split('\n');
@@ -183,9 +190,16 @@ function SimpleTextNoLineNumbers(appendTo) {
 	var ta = this.textarea;
 	var ln = this.linenumbers;
 	this.textarea.onkeyup = function(event) {
-		if (event && event.currentTarget)
+		if (event && event.keyCode == 13 && event.currentTarget) { // return key
+			// send to gdb as program input
+			// just send the new text
 			ta = event.currentTarget;
-		/*if (ta.owner)
+			var newText = ta.owner.getCode().slice(ta.owner.currentCode.length)
+			sendGdbMsg('console_command',newText,updateWindows)
+		}
+		/*if (event && event.currentTarget)
+			ta = event.currentTarget;
+		if (ta.owner)
 			ln = ta.owner.linenumbers
 		var text = ta.owner.getCode();
 		var bits = text.split('\n').length;
@@ -221,6 +235,7 @@ function SimpleTextNoLineNumbers(appendTo) {
 		}
 		this.textarea.innerHTML = text;
 		this.textarea.onkeyup();
+		this.currentCode=this.getCode();
 	}
 	this.enable = function() {
 		this.setCode(this.getCode());
@@ -228,6 +243,13 @@ function SimpleTextNoLineNumbers(appendTo) {
 		this.textarea.style.backgroundColor = 'LightBlue';
 		this.textarea.style.color = 'Black';
 	}
+	this.disable = function() {
+		this.setCode(this.getCode());
+		this.textarea.contentEditable = false;
+		this.textarea.style.backgroundColor = 'LightGrey';
+		this.textarea.style.color = 'grey';
+	}
+
 	this.enable();
 	this.setCode('');
 }

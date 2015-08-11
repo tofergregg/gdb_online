@@ -42,6 +42,8 @@ var ecoLibrary = (
 
 function init() {
   my_guid=guid(); // make global
+  updateProgramState.lineNum=1;
+  editor.highlight(1,"Blue");
 }
 
 function guid() {
@@ -54,49 +56,171 @@ function guid() {
     s4() + '-' + s4() + s4() + s4();
 }
 
+function startSpinner(){
+	gdb_spinner = new Spinner(spinnerOpts).spin(document.getElementById('codeText'));
+	document.getElementById("next").disabled=true;
+	document.getElementById("run").disabled=true;
+}
+
+function stopSpinner(){
+	gdb_spinner.stop();
+	document.getElementById("next").disabled=false;
+	document.getElementById("run").disabled=false;
+}
+
 function compileProg() {
   console.log("Compiling...");
-  // post the program to be compiled
+  startSpinner();
+  sendGdbMsg('compile',editor.getCode(),compileResult)  // post the program to be compiled
+  /*
   $.post("cgi-bin/compileProg.cgi",{'uuid':my_guid,'program':editor.getCode()}, function(data) {
 	var response = JSON.parse(data)
   	prog_console.setCode(prog_console.getCode()+response['output'])
   	if (response['returncode']==0) {
   		console.log("No compilation errors.");
+  		stopSpinner();
   		startRunning();
   	}
   	else {
   		console.log("Compilation errors, see console.");
   	}
-  });
+  });*/
+}
+
+function compileResult(response){
+	stopSpinner();
+	if (response['returncode']==0) {
+  		console.log("No compilation errors.");
+  		stopSpinner();
+  		startRunning();
+  	}
+  	else {
+  		console.log("Compilation errors, see console.");
+  	}
+}
+
+function updateWindows(response){
+	if (response['error'] != null) {
+  			console.log("comms returned an error: "+response['error']);
+  		}
+  		else {
+  			updateProgramState(response['gdb']);
+  			// update console, but only if it was a gdb_command (to 
+  			// avoid duplicating console input)
+  			if (response['command'] != 'console_command') {
+  				prog_console.setCode(prog_console.getCode()+response['console'])
+  			}
+  		}
+}
+
+function sendGdbMsg(command,data_val,next_func){
+  // sends a command to gdb and then calls next_func with the result
+  $.post("cgi-bin/server_comms.cgi",{'uuid':my_guid,'command':command,'data':data_val},
+  	function(data){
+  		sendGdbMsg.data = data;
+  		stopSpinner();
+  		if (data.match("A problem occurred in a Python script.")) {
+  			if (data.match("Connection refused")) {
+  				alert("There was an error connecting to the server. It is probably down.");
+  			}
+  			else {
+  				alert("There was an error in the script.");
+  			}
+  		}
+  		else {
+			var response=JSON.parse(data);
+			response['command']=command;
+			// handle gdb output
+			next_func(response);
+  		}
+  	});
 }
 
 function startRunning(){
   console.log("Starting program...");
   // run the program in gdb
-  $.post("cgi-bin/server_comms.cgi",{'uuid':my_guid,'command':'load','data':'programs/bin/'+my_guid},
-  	function(data){
-  		var response=JSON.parse(data);
-  		// handle gdb output
-  		updateProgramState(response['gdb']);
-  		// update console
-  		prog_console.setCode(prog_console.getCode()+response['console'])
-  	});
+  startSpinner();
+  sendGdbMsg('load','',updateWindows);
 }
 
 function nextStep(){
 	console.log("Sending 'next' to gdb");
-	
+	sendGdbMsg('gdb_command','next',updateWindows);
 }
 
-function updateProgramState(gdb_msg){
+function updateProgramState(gdb_msg){	
+	// send "where" command to gdb to find line
+	sendGdbMsg('gdb_command','where',whereResponse);
+	return;
+	/*
+	if (gdb_msg == '') return;
 	console.log(gdb_msg);
+	var matchFound = false;
 	// for now, just find the first gdb output line that has a number
 	lines=gdb_msg.split('\n');
 	for (i=0;i<lines.length;i++) {
-		lineNum = lines[i].match(/^\d+/);
-		if (lineNum) {
-			editor.highlight(lineNum,"Blue");
+		// try to match a number at beginning of line
+		lineMatch = lines[i].match(/^\d+\t/);
+		if (lineMatch) {
+			editor.clearHighlights();
+			updateProgramState.lineNum=parseInt(lineMatch);
+			editor.highlight(updateProgramState.lineNum,"Blue");
+			matchFound = true;
 			break;
+		}
+		
+		// try to match "Inferior process ... exited"
+		lineMatch = lines[i].match(/^\[Inferior.*exited/);
+		if (lineMatch) {
+			// program exited
+			// reset program and highlight line 1
+			document.getElementById("next").disabled=true;
+			document.getElementById("run").disabled=true;
+			editor.clearHighlights();
+			updateProgramState.lineNum=1;
+			editor.highlight(updateProgramState.lineNum,"Blue");
+			matchFound = true;
+			break;
+		}
+		if (!matchFound) {
+			// hmm...just go to the next line for now, unless exited
+			editor.clearHighlights();
+			updateProgramState.lineNum++;
+			editor.highlight(updateProgramState.lineNum,"Blue");
+		}
+	}
+	*/
+}
+
+function whereResponse(response){
+	resp=response;
+	console.log("where response:"+response['gdb']);
+	if (response['gdb'].match('No stack.')) {
+		// restart and go to line 1 (but allow "run")
+		document.getElementById("next").disabled=true;
+		editor.clearHighlights();
+		updateProgramState.lineNum=1;
+		editor.highlight(updateProgramState.lineNum,"Blue");
+	}
+	else if (response['gdb']=='') return; // possibly waiting for program input
+	else {
+		lines = response['gdb'].split('\n');
+		for (i=0;i<lines.length;i++) {
+			if (lines[i].match(/#0/)) {
+				lineSplit = lines[i].split(':')
+				if (lineSplit.length==1) {
+					// oops, no line number, so we just increment by 1
+					editor.clearHighlights();
+					updateProgramState.lineNum++;
+					editor.highlight(updateProgramState.lineNum,"Blue");
+					break;
+				}
+				lineNum = parseInt(lineSplit[lineSplit.length-1])
+				editor.clearHighlights();
+				updateProgramState.lineNum=lineNum;
+				editor.highlight(updateProgramState.lineNum,"Blue");
+				break;
+			}
 		}
 	}
 }
@@ -132,7 +256,6 @@ function drawCircle(x,y,radius,color){
           ctx.fill();
         }
 }
-
 
 function setCookie(name,value){
     var expiredays = 14; // set two week expiration
@@ -182,4 +305,28 @@ intIndexOfMatch = strText.indexOf( strTarget );
 // replaced out with the new substring.
 return( strText );
 }
+
+var spinnerOpts = {
+  lines: 13 // The number of lines to draw
+, length: 3 // The length of each line
+, width: 2 // The line thickness
+, radius: 4 // The radius of the inner circle
+, scale: 1 // Scales overall size of the spinner
+, corners: 1 // Corner roundness (0..1)
+, color: '#000' // #rgb or #rrggbb or array of colors
+, opacity: 0.25 // Opacity of the lines
+, rotate: 0 // The rotation offset
+, direction: 1 // 1: clockwise, -1: counterclockwise
+, speed: 1 // Rounds per second
+, trail: 60 // Afterglow percentage
+, fps: 20 // Frames per second when using setTimeout() as a fallback for CSS
+, zIndex: 2e9 // The z-index (defaults to 2000000000)
+, className: 'spinner' // The CSS class to assign to the spinner
+, top: '4%' // Top position relative to parent
+, left: '50%' // Left position relative to parent
+, shadow: false // Whether to render a shadow
+, hwaccel: false // Whether to use hardware acceleration
+, position: 'absolute' // Element positioning
+}
+
 

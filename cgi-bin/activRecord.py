@@ -13,6 +13,8 @@ BUF_LEN = 1024
 IP_ADDR = "130.64.23.165"
 PORT_NUM = 55444
 GDB_WARNING="warning: GDB: Failed to set controlling terminal: Operation not permitted\r\n"
+PROG_FOLDER = "/tmp/programs/"
+
 
 class Gdb_session:
 	ON_POSIX = 'posix' in sys.builtin_module_names
@@ -35,8 +37,8 @@ class Gdb_session:
 		# set gdb listsize to 10000 to always get all output
 		self.send_command(self.p,'set listsize 10000')
 		self.send_command(self.p,'set pagination off')
-		time.sleep(1) # wait for gdb to load, etc.
-		self.read_gdb_output(self.p) # ignore
+		time.sleep(2) # wait for gdb to load, etc.
+		print self.read_gdb_output(self.p) # ignore
 
 		self.set_func_breakpoints(self.p)
 
@@ -185,8 +187,8 @@ class Gdb_sessions:
 	def __init__(self):
 		self.sessions = {}
 
-	def create_session(self,uuid,program_name):
-		self.sessions[uuid]=Gdb_session(program_name)
+	def create_session(self,uuid):
+		self.sessions[uuid]=Gdb_session(PROG_FOLDER+"bin/"+uuid)
 		session_start_output = self.sessions[uuid].get_output()
 		# remove pesky gdb warning about the console
 		cons_output = session_start_output['console']
@@ -195,8 +197,8 @@ class Gdb_sessions:
 
 	def send_command_to_session(self,uuid,command,data):
 		if command == 'load':
-			# no uuid yet, data should hold program name
-			return self.create_session(uuid,data)
+			# no uuid yet, program name will be the uuid
+			return self.create_session(uuid)
 		# session should already exist
 		if not self.sessions.has_key(uuid):
 			return {'error':"uuid does not have associated gdb instance."}
@@ -204,7 +206,7 @@ class Gdb_sessions:
 
 		if command == 'gdb_command':
 			if session.send_to_gdb('g',data) == 'ok':
-				time.sleep(0.3) # wait for processing
+				time.sleep(1) # wait for processing
 				return session.get_output()
 		elif command == 'console_command':
 			if session.send_to_gdb('c',data) == 'ok':
@@ -212,26 +214,82 @@ class Gdb_sessions:
 				return session.get_output()
 		return {'error':"no command"}
 
+def compile(uuid,program):
+	# make sure /tmp/programs/bin exists
+	try:
+		os.makedirs(PROG_FOLDER+"bin/")
+	except OSError:
+		pass # dirs already exist
+
+	# save the file as /tmp/programs/[uuid].cpp and compile it
+	# with -g -O0 programs/[uuid].cpp -o /tmp/programs/bin/[uuid]
+	prog_name = PROG_FOLDER+uuid+".cpp"
+	
+	# save the program
+	with open(prog_name,"w") as f:
+		f.write(program)
+		
+	# update PATH so we can use clang++
+	#compile the program, and return the output of the compilation
+	compile_proc = subprocess.Popen(['clang++','-g','-O0',
+				prog_name,'-o',PROG_FOLDER+'bin/'+uuid],
+				stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+	compile_proc.wait()
+
+	compile_output = compile_proc.stdout.read()+compile_proc.stderr.read()
+	return {'output':compile_output,'returncode':compile_proc.returncode}
+
 def handle_connection(gs,connection,address):
 	#uuid,program_name=sys.argv[1],sys.argv[2]
 	# get the data from the connection
 	print "connection: "+str(connection)+", address:"+str(address)
-	while True:
-		buf = connection.recv(BUF_LEN)
-		if len(buf) > 0:
-		    full_msg = json.loads(buf) # a dict with uuid, command, and data
-		    print "Command:"
-		    print "\tuuid:",full_msg['uuid']
-		    print "\tcommand:",full_msg['command']
-		    print "\tdata:",full_msg['data']
-		    
-		    response = gs.send_command_to_session(full_msg['uuid'],
-		    					full_msg['command'],
-		    					full_msg['data'])
-		    connection.send(json.dumps(response))
+
+	# first, receive 4-bytes, which will give the total message length
+	# (the 4-bytes are not counted)
+	
+	bytes_left_str = ''
+	while len(bytes_left_str) < 4:
+		bytes_left_str += connection.recv(1)
+	
+	bytes_left = (ord(bytes_left_str[0]) << 24 | 
+		     ord(bytes_left_str[1]) << 16 |
+		     ord(bytes_left_str[2]) << 8  |
+		     ord(bytes_left_str[3]))
+	
+	# now receive the rest of the message, in 1KB chunks
+	full_msg = ""
+	while bytes_left > 0:
+		if bytes_left < BUF_LEN:
+			buf = connection.recv(bytes_left)
 		else:
-		    break
-		print "waiting for data..."
+			buf = connection.recv(BUF_LEN)
+		bytes_left -= len(buf)
+		full_msg += buf
+		
+	full_msg = json.loads(full_msg) # a dict with uuid, command, and data
+	print "Command:"
+	print "\tuuid:",full_msg['uuid']
+	print "\tcommand:",full_msg['command']
+	print "\tdata:",full_msg['data']
+
+	if full_msg['command']=='compile':
+		response = compile(full_msg['uuid'],full_msg['data'])
+	else:
+		response = gs.send_command_to_session(full_msg['uuid'],
+						full_msg['command'],
+						full_msg['data'])
+	response = json.dumps(response)
+	print response
+	msg_len = len(response)
+	# first send the 4-byte length, big-endian
+	connection.send(chr(msg_len >> 24))
+	connection.send(chr((msg_len & 0xFF0000) >> 16))
+	connection.send(chr((msg_len & 0xFF00) >> 8))
+	connection.send(chr(msg_len & 0xFF))
+	
+	# send the actual message
+	connection.send(response)
+	
 	print "connection closed with address "+str(address)
 
 if __name__ == "__main__":
