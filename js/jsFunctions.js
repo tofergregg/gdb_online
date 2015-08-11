@@ -150,80 +150,38 @@ function nextStep(){
 
 function updateProgramState(gdb_msg){	
 	// send "where" command to gdb to find line
-	sendGdbMsg('gdb_command','where',whereResponse);
-	return;
-	/*
-	if (gdb_msg == '') return;
-	console.log(gdb_msg);
-	var matchFound = false;
-	// for now, just find the first gdb output line that has a number
-	lines=gdb_msg.split('\n');
-	for (i=0;i<lines.length;i++) {
-		// try to match a number at beginning of line
-		lineMatch = lines[i].match(/^\d+\t/);
-		if (lineMatch) {
-			editor.clearHighlights();
-			updateProgramState.lineNum=parseInt(lineMatch);
-			editor.highlight(updateProgramState.lineNum,"Blue");
-			matchFound = true;
-			break;
-		}
-		
-		// try to match "Inferior process ... exited"
-		lineMatch = lines[i].match(/^\[Inferior.*exited/);
-		if (lineMatch) {
-			// program exited
-			// reset program and highlight line 1
-			document.getElementById("next").disabled=true;
-			document.getElementById("run").disabled=true;
-			editor.clearHighlights();
-			updateProgramState.lineNum=1;
-			editor.highlight(updateProgramState.lineNum,"Blue");
-			matchFound = true;
-			break;
-		}
-		if (!matchFound) {
-			// hmm...just go to the next line for now, unless exited
-			editor.clearHighlights();
-			updateProgramState.lineNum++;
-			editor.highlight(updateProgramState.lineNum,"Blue");
-		}
-	}
-	*/
-}
-
-function whereResponse(response){
-	resp=response;
-	console.log("where response:"+response['gdb']);
-	if (response['gdb'].match('No stack.')) {
-		// restart and go to line 1 (but allow "run")
-		document.getElementById("next").disabled=true;
-		editor.clearHighlights();
-		updateProgramState.lineNum=1;
-		editor.highlight(updateProgramState.lineNum,"Blue");
-	}
-	else if (response['gdb']=='') return; // possibly waiting for program input
-	else {
-		lines = response['gdb'].split('\n');
-		for (i=0;i<lines.length;i++) {
-			if (lines[i].match(/#0/)) {
-				lineSplit = lines[i].split(':')
-				if (lineSplit.length==1) {
-					// oops, no line number, so we just increment by 1
-					editor.clearHighlights();
-					updateProgramState.lineNum++;
-					editor.highlight(updateProgramState.lineNum,"Blue");
-					break;
-				}
-				lineNum = parseInt(lineSplit[lineSplit.length-1])
+	sendGdbMsg('gdb_command','where', function(response) {
+			console.log("where response:"+response['gdb']);
+			if (response['gdb'].match('No stack.')) {
+				// restart and go to line 1 (but allow "run")
+				document.getElementById("next").disabled=true;
 				editor.clearHighlights();
-				updateProgramState.lineNum=lineNum;
+				updateProgramState.lineNum=1;
 				editor.highlight(updateProgramState.lineNum,"Blue");
-				break;
 			}
-		}
-	}
-}
+			else if (response['gdb']=='') return; // possibly waiting for program input
+			else {
+				lines = response['gdb'].split('\n');
+				for (i=0;i<lines.length;i++) {
+					if (lines[i].match(/#0/)) {
+						lineSplit = lines[i].split(':')
+						if (lineSplit.length==1) {
+							// oops, no line number, so we just increment by 1
+							editor.clearHighlights();
+							updateProgramState.lineNum++;
+							editor.highlight(updateProgramState.lineNum,"Blue");
+							break;
+						}
+						lineNum = parseInt(lineSplit[lineSplit.length-1])
+						editor.clearHighlights();
+						updateProgramState.lineNum=lineNum;
+						editor.highlight(updateProgramState.lineNum,"Blue");
+						break;
+					}
+				}
+			}
+		});
+}	
 
 function size(width,height) {
   this.width = width;

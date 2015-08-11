@@ -38,7 +38,7 @@ class Gdb_session:
 		self.send_command(self.p,'set listsize 10000')
 		self.send_command(self.p,'set pagination off')
 		time.sleep(2) # wait for gdb to load, etc.
-		print self.read_gdb_output(self.p) # ignore
+		self.read_gdb_output(self.p) # ignore
 
 		self.set_func_breakpoints(self.p)
 
