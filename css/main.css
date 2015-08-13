@@ -6,18 +6,18 @@
 #activation_records
 {
 	float: left;
-	width: 172px;
-	height: 464px;
+	width: 500px;
+	height: 600px;
 	top: 23px;
-	left: 461px;
+	left: 514px;
 	position: absolute;
 	background-color: #C00000;
 }
 #run_options
 {
 	float: left;
-	width: 447px;
-	height: 50px;
+	width: 500px;
+	height: 30px;
 	top: 23px;
 	left: 12px;
 	position: absolute;
@@ -26,9 +26,9 @@
 #code_window
 {
 	float: left;
-	width: 447px;
-	height: 290px;
-	top: 75px;
+	width: 500px;
+	height: 366px;
+	top: 55px;
 	left: 12px;
 	position: absolute;
 	background-color: #C00000;
@@ -36,9 +36,9 @@
 #prog_console
 {
 	float: left;
-	width: 447px;
-	height: 118px;
-	top: 368px;
+	width: 500px;
+	height: 200px;
+	top: 423px;
 	left: 12px;
 	position: absolute;
 	background-color: #C00000;

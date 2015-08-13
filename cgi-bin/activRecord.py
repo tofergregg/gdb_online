@@ -4,7 +4,7 @@ import sys,os,pty
 import subprocess
 import select
 import fcntl
-import time
+import time, sched, datetime
 import socket
 import json
 import threading
@@ -20,6 +20,7 @@ class Gdb_session:
 	ON_POSIX = 'posix' in sys.builtin_module_names
 
 	def __init__(self,program_name):
+		self.last_interaction = datetime.datetime.now()
 		program_pts,self.program_fd = self.set_pty_for_gdb()
 		self.p = subprocess.Popen(['gdb',program_name], stdout=subprocess.PIPE, stdin=subprocess.PIPE,
 				stderr=subprocess.PIPE,bufsize=1, close_fds=self.ON_POSIX)
@@ -47,7 +48,7 @@ class Gdb_session:
 
 		# start running program
 		self.send_command(self.p,'run')
-		time.sleep(0.5) # wait a bit
+		time.sleep(3) # wait a bit
 
 	def send_command(self,proc,cmd):
 		proc.stdin.write(cmd+'\n')
@@ -95,7 +96,7 @@ class Gdb_session:
 		all_funcs = all_funcs.split('\n')[1:-2]
 
 		# just strip out the definition, without the return type and without the semicolon
-		all_funcs = [x.split(' ')[1] for x in all_funcs]
+		all_funcs = [' '.join(x.split(' ')[1:]) for x in all_funcs]
 		all_funcs = [x.split(';')[0] for x in all_funcs]
 
 		#print all_funcs
@@ -104,7 +105,7 @@ class Gdb_session:
 		# first, set the listsize so we only get one line
 		self.send_command(p,'set listsize 1')
 		time.sleep(0.1)
-		self.read_gdb_output(p)
+		self.read_gdb_output(p) # ignore
 
 		# get a list of the function lines
 		func_lines=[]
@@ -123,7 +124,7 @@ class Gdb_session:
 
 		# get response
 		time.sleep(0.2)
-		self.read_gdb_output(p)
+		print self.read_gdb_output(p) #ignore
 
 	def set_pty_for_gdb(self):
 		# sets up a pseudo-terminal that GDB can write to and read from
@@ -163,6 +164,8 @@ class Gdb_session:
 			# we have to let the user (web page) determine this
 			# So, cmd_type should be "g" for gdb input,
 			# and "c" for console input
+			self.last_interaction = datetime.datetime.now()
+			 
 			if cmd_type == 'g':
 				self.send_command(self.p,command)
 				return "ok"
@@ -182,7 +185,12 @@ class Gdb_session:
 		prog_output = self.read_prog_output(self.program_fd)
 
 		return {'gdb':gdb_output,'console':prog_output}
-
+	
+	def get_program_status(self):
+		# first, send "where", and return that as where
+		# next, send "info args," and return the arguments
+		# finally, send "info locals," and return the local variables
+		pass
 class Gdb_sessions:
 	def __init__(self):
 		self.sessions = {}
@@ -212,6 +220,9 @@ class Gdb_sessions:
 			if session.send_to_gdb('c',data) == 'ok':
 				time.sleep(0.3) # wait for processing
 				return session.get_output()
+		elif command == 'status':
+			# get the program status
+			return session.get_program_status()
 		return {'error':"no command"}
 
 def compile(uuid,program):
@@ -229,7 +240,6 @@ def compile(uuid,program):
 	with open(prog_name,"w") as f:
 		f.write(program)
 		
-	# update PATH so we can use clang++
 	#compile the program, and return the output of the compilation
 	compile_proc = subprocess.Popen(['clang++','-g','-O0',
 				prog_name,'-o',PROG_FOLDER+'bin/'+uuid],
@@ -237,6 +247,13 @@ def compile(uuid,program):
 	compile_proc.wait()
 
 	compile_output = compile_proc.stdout.read()+compile_proc.stderr.read()
+	
+	# sneakily compile with g++, which does not optimize as much for gdb
+	compile_proc = subprocess.Popen(['g++','-g','-O0',
+				prog_name,'-o',PROG_FOLDER+'bin/'+uuid],
+				stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+	compile_proc.wait()
+	
 	return {'output':compile_output,'returncode':compile_proc.returncode}
 
 def handle_connection(gs,connection,address):
@@ -292,8 +309,36 @@ def handle_connection(gs,connection,address):
 	
 	print "connection closed with address "+str(address)
 
+def cleanup_gdb_sessions(sc,gs):
+	print "Cleaning up old gdb sessions..."
+	now = datetime.datetime.now()
+	sessions_to_kill = []
+	
+	for session in gs.sessions:
+		elapsed_time = now - gs.sessions[session].last_interaction
+		minutes,seconds = divmod(elapsed_time.days * 86400 + elapsed_time.seconds, 60)
+		if minutes > 10:
+			print "Killing session "+session
+			gs.sessions[session].p.kill() # kill the gdb process
+			sessions_to_kill.append(session) # plan to remove the session
+	for session in sessions_to_kill:
+		gs.sessions.pop(session) # kill it
+	
+	sc.enter(10,1,cleanup_gdb_sessions,(sc,gs))
+
 if __name__ == "__main__":
 	gs = Gdb_sessions()
+	
+	# set up timer to kill Gdb_sessions that haven't been touched in 10 minutes
+	# run scheduler in its own thread, every 10 seconds
+	
+	s = sched.scheduler(time.time, time.sleep)
+	s.enter(10,1,cleanup_gdb_sessions,(s,gs))
+	
+	t_clean = threading.Thread(target=s.run)
+	t_clean.start()
+	
+	print "Setting up socket server"
 	serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	serversocket.bind((IP_ADDR, PORT_NUM))
 	serversocket.listen(5) # become a server socket, maximum 5 connections
