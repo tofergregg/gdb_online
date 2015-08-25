@@ -10,7 +10,7 @@ function init() {
   editor.clearHighlights();
   editor.highlight(1,"Blue");
   document.getElementById("next").disabled=true;
-  document.getElementById("run").disabled=true;
+  //document.getElementById("run").disabled=true;
   
   // set up canvas
   var canvas = document.getElementById("drawingArea");
@@ -33,7 +33,25 @@ function load_prog(prog) {
 		editor.setCode("#include<iostream>\nusing namespace std;\n\nint fib(int num);\n\nint main(){\n	int num, result;\n	\n	cout << \"Which Fibonnaci number would you like? \";\n	cin >> num;\n	\n	result = fib(num);\n	\n	cout << \"Fib \" << num << \" is \" << result << \".\" << endl;\n	\n	return 0;\n}\n\nint fib(int num) {\n	if (num==0) return 0;\n	if (num==1) return 1;\n	\n	return fib(num-1) + fib(num-2);\n}\n");
 	}
 	else if (prog=='func_test') {
-		editor.setCode('#include<iostream>\nusing namespace std;\nfloat square(string s,float x);\n\nint main() {\n  square("abc,)\\"def",4);\n}\n\nfloat square(string s,float x){\n  string s2;\n  cout << "enter a string: ";\n  getline(cin,s2);\n  int y=5;\n  cout << s << s2 << endl;\n  return x * x * y;\n}\n');
+		editor.setCode('#include<iostream>\nusing namespace std;\nfloat some_func(string s,float x);\n\nint main() {\n  some_func("my arg",4);\n}\n\nfloat some_func(string s,float x){\n  string s2;\n  cout << "enter a string: ";\n  getline(cin,s2);\n  int y=5;\n  cout << s << s2 << endl;\n  return x * x * y;\n}\n');
+	}
+	else if (prog=='mult_test_1') {
+		editor.setCode('#include<iostream>\nusing namespace std;\n\nfloat mult5(float x) {\n    return 5 * x;\n}\n\nfloat mult7(float x) {\n    return 7 * x;\n}\n\nint main() {\n    cout << mult5(3) << endl;\n    cout << mult7(3) << endl;\n    return 0;\n}\n');
+	}
+	else if (prog=='mult_test_2') {
+		editor.setCode('#include<iostream>\nusing namespace std;\n\nfloat mult5(float x) {\n    return 5 * x;\n}\n\nfloat mult7_5(float x) {\n    return 7 * x * mult5(2);\n}\n\nint main() {\n    cout << mult7_5(3) << endl;\n    return 0;\n}\n');
+	}
+	else if (prog=='scope_ex') {
+		editor.setCode("#include<iostream>\nusing namespace std;\nint main()\n{\n    int a = 0; // scope of the first 'a' begins\n    int b = 0;\n    ++a; // the name 'a' is in scope and refers to the first 'a'\n    for (int i=0;i<3;i++){\n        int a = 4; // scope of the second 'a' begins\n                   // scope of the first 'a' is hidden\n        b = b + a + i; // 'a' is in scope and refers to the second 'a'                 \n    } // block ends, scope of the second 'a' ends, scope of 'i' ends\n      //             scope of the first 'a' resumes\n    cout << a << \",\" << b << endl;\n    cout << i << endl; // error! ('i' not in scope)\n    return 0;\n} // block ends, scope of 'a' and 'b' ends\n");
+	}
+	else if (prog=='recursion_ex_1') {
+		editor.setCode('#include<iostream>\nusing namespace std;\n\nvoid recurse(int x){\n  cout << "x: " << x << endl;\n  recurse(x+1);\n}\nint main(){\n        recurse(0);\n        return 0;\n}\n');
+	}
+	else if (prog=='count_down_recurse') {
+		editor.setCode('#include<iostream>\nusing namespace std;\n\nvoid countDown(int count){\n        if (count<0) return;\n        cout << count << endl;\n        countDown(count-1);\n}\nint main(){\n        countDown(3);\n}\n');
+	}
+	else if (prog=='count_up_recurse') {
+		editor.setCode('#include<iostream>\nusing namespace std;\n\nvoid countUp(int count){\n        if (count<0) return;\n        countUp(count-1);\n        cout << count << endl;\n}\nint main(){\n        countUp(3);\n}');
 	}
 }
 
@@ -50,13 +68,13 @@ function guid() {
 function startSpinner(){
 	gdb_spinner = new Spinner(spinnerOpts).spin(document.getElementById('codeText'));
 	document.getElementById("next").disabled=true;
-	document.getElementById("run").disabled=true;
+	//document.getElementById("run").disabled=true;
 }
 
 function stopSpinner(){
 	gdb_spinner.stop();
 	document.getElementById("next").disabled=false;
-	document.getElementById("run").disabled=false;
+	//document.getElementById("run").disabled=false;
 }
 
 function compileProg() {
@@ -109,6 +127,7 @@ function sendGdbMsg(command,data_val,next_func){
   			else {
   				alert("There was an error in the script.");
   			}
+			console.log(data);
   		}
   		else {
 			var response=JSON.parse(data);
@@ -379,6 +398,10 @@ function draw_stack(stack_frames) {
       		// draw arrow?
 	}
 	
+}
+
+function clearConsole() {
+	prog_console.setCode("");
 }
 
 function size(width,height) {

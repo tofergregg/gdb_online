@@ -17,12 +17,18 @@
 <body onload="init()">
 <div class="smallcaps" id="run_options"><button onclick="compileProg()">Compile</button>
 <button id="next" disabled="true" onclick="nextStep()">Next</button>
-<button id="run" disabled="true" onclick="runProg()">Run</button>
+<!--<button id="run" disabled="true" onclick="runProg()">Run</button> -->
 <button id="stop" disabled="true" onclick="stopProg()">Stop</button>
 <select id="selectBox" onchange="load_prog_from_select();">
   <option value="square">Square</option>
+  <option value="mult_test_1">Multiplication Example 1</option>
+  <option value="mult_test_2">Multiplication Example 2</option>
   <option value="fib">Fibonacci</option>
   <option value="func_test">Function Test</option>
+  <option value="scope_ex">Scope Example (has error)</option>
+  <option value="recursion_ex_1">Recursion Example 1</option>
+  <option value="count_down_recurse">Count Down (recursion)</option>
+  <option value="count_up_recurse">Count Up (recursion)</option>
 </select>
 
 </div><!-- #node4 end -->
@@ -35,6 +41,7 @@ var editor = new SimpleText(document.getElementById("code_window"));
 load_prog('square');
 </script>
 <div id="prog_console" style="overflow:auto;"><span class="smallcaps">Console<br></span>
+<button id="clearConsole" onclick="clearConsole()">Clear</button>
 </div><!-- #node6 end -->
 <script>
 var prog_console = new SimpleTextNoLineNumbers(document.getElementById("prog_console"));

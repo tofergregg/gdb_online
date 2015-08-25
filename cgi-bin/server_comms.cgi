@@ -7,6 +7,7 @@ import json
 cgitb.enable()
 
 SERVER_ADDR = '130.64.23.165' # homework.cs.tufts.edu (dell24)
+#SERVER_ADDR = '10.3.14.148' # xubuntu
 PORT_NUM = 55444
 BUF_LEN = 2048
 

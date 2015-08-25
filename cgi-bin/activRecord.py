@@ -48,6 +48,13 @@ class Gdb_session:
 
 		# start running program
 		self.send_command(self.p,'run')
+		
+		# it looks like the next line is going to cause too-slow behavior
+		#self.send_command(self.p,'target record-full') # record for stepping backwards
+		# this could be useful for finding the return value of a function:
+		#   if "where full" produces one fewer stack frame than the previous
+		#   "where full," then we can do a "reverse-next" and then a "finish"
+		#   command to retrieve the return value for the function.
 		time.sleep(3) # wait a bit
 
 	def send_command(self,proc,cmd):
@@ -92,34 +99,26 @@ class Gdb_session:
 		all_funcs = self.read_gdb_output(p)
 
 		# just grab the first file, and turn into list of functions
-		all_funcs = all_funcs.split('File ')[1]
-		all_funcs = all_funcs.split('\n')[1:-2]
+		all_funcs = all_funcs.split('File ')[1].split("\n\n")[0]
+		all_funcs = all_funcs.split('\n')[1:]
+		
+		# function could be "static", and remove if it is
+		all_funcs = [x[len("static "):] if x.startswith('static ') else x for x in all_funcs]
 
 		# just strip out the definition, without the return type and without the semicolon
 		all_funcs = [' '.join(x.split(' ')[1:]) for x in all_funcs]
 		all_funcs = [x.split(';')[0] for x in all_funcs]
 
+		#print "all functions:"
 		#print all_funcs
-
-		# find the line number for each function
-		# first, set the listsize so we only get one line
-		self.send_command(p,'set listsize 1')
-		time.sleep(0.1)
-		self.read_gdb_output(p) # ignore
-
-		# get a list of the function lines
-		func_lines=[]
-		for func in all_funcs:
-			self.send_command(p,'list '+func)
-			time.sleep(0.2)
-			response = self.read_gdb_output(p)
-
-			# split on tab to get just the line number
-			response = response.split('\t')[0]
-			func_lines.append(response)
+		
+		# when compiled with g++, there are some initialization functions that we
+		# don't want to break on
+		all_funcs = [x for x in all_funcs if "_GLOBAL__" not in x]
+		all_funcs = [x for x in all_funcs if "__static" not in x]
 
 		# set breakpoints for each function
-		for func in func_lines:
+		for func in all_funcs:
 			self.send_command(p,'b '+func)
 
 		# get response
