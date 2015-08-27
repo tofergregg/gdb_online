@@ -8,12 +8,16 @@ import time, sched, datetime
 import socket
 import json
 import threading
+import mi_parser
 
 BUF_LEN = 1024
 IP_ADDR = "130.64.23.165"
 PORT_NUM = 55444
-GDB_WARNING="warning: GDB: Failed to set controlling terminal: Operation not permitted\r\n"
+#GDB_WARNING="warning: GDB: Failed to set controlling terminal: Operation not permitted\r\n"
+GDB_WARNING='&"warning: GDB: Failed to set controlling terminal: Operation not permitted\\n"\r\n'
 PROG_FOLDER = "/tmp/programs/"
+MAX_RESPONSE = 10240 # only allow up to a 10KB response, in case something gets out of control
+GDB_PROMPT = '\n(gdb) \n'
 
 
 class Gdb_session:
@@ -22,7 +26,7 @@ class Gdb_session:
 	def __init__(self,program_name):
 		self.last_interaction = datetime.datetime.now()
 		program_pts,self.program_fd = self.set_pty_for_gdb()
-		self.p = subprocess.Popen(['gdb',program_name], stdout=subprocess.PIPE, stdin=subprocess.PIPE,
+		self.p = subprocess.Popen(['gdb','-q','-i','mi',program_name], stdout=subprocess.PIPE, stdin=subprocess.PIPE,
 				stderr=subprocess.PIPE,bufsize=1, close_fds=self.ON_POSIX)
 
 		fl = fcntl.fcntl(self.p.stdout, fcntl.F_GETFL)
@@ -38,6 +42,12 @@ class Gdb_session:
 		# set gdb listsize to 10000 to always get all output
 		self.send_command(self.p,'set listsize 10000')
 		self.send_command(self.p,'set pagination off')
+		self.send_command(self.p,'set confirm off')
+		
+		# redefine shell to a blank function to be safer
+		self.send_command(self.p,'define shell')
+		self.send_command(self.p,'end')
+		
 		time.sleep(2) # wait for gdb to load, etc.
 		self.read_gdb_output(self.p) # ignore
 
@@ -76,7 +86,7 @@ class Gdb_session:
 			except IOError:
 				break # no output
 			lines+=c
-		return lines
+		return lines[:MAX_RESPONSE]
 
 	def send_prog_input(self,fd,text):
 		os.write(fd,text+'\n')
@@ -90,17 +100,23 @@ class Gdb_session:
 			except OSError:
 				break # no output
 			lines+=c
-		return lines
+		return lines[:MAX_RESPONSE]
 
 	def set_func_breakpoints(self,p):
 		# get a list of all functions (it's going to be big...
 		self.send_command(p,'info functions')
 		time.sleep(1)
 		all_funcs = self.read_gdb_output(p)
+				
+		# strip out initial '~"' and final '\n"' (from mi)
+		all_funcs = all_funcs.replace('~"','').replace('\\n"','').replace('\\n','\n')
+		
+		#print all_funcs
+
 
 		# just grab the first file, and turn into list of functions
 		all_funcs = all_funcs.split('File ')[1].split("\n\n")[0]
-		all_funcs = all_funcs.split('\n')[1:]
+		all_funcs = all_funcs.split('\n')[2:]
 		
 		# function could be "static", and remove if it is
 		all_funcs = [x[len("static "):] if x.startswith('static ') else x for x in all_funcs]
@@ -108,14 +124,14 @@ class Gdb_session:
 		# just strip out the definition, without the return type and without the semicolon
 		all_funcs = [' '.join(x.split(' ')[1:]) for x in all_funcs]
 		all_funcs = [x.split(';')[0] for x in all_funcs]
-
-		#print "all functions:"
-		#print all_funcs
 		
 		# when compiled with g++, there are some initialization functions that we
 		# don't want to break on
 		all_funcs = [x for x in all_funcs if "_GLOBAL__" not in x]
 		all_funcs = [x for x in all_funcs if "__static" not in x]
+		
+		#print "all functions:"
+		#print all_funcs
 
 		# set breakpoints for each function
 		for func in all_funcs:
@@ -124,6 +140,9 @@ class Gdb_session:
 		# get response
 		time.sleep(0.2)
 		print self.read_gdb_output(p) #ignore
+		
+	def clear_breakpoints(self):
+		self.send_command(self.p,'delete')
 
 	def set_pty_for_gdb(self):
 		# sets up a pseudo-terminal that GDB can write to and read from
@@ -157,6 +176,44 @@ class Gdb_session:
 		#print pts
 		return pts,fd
 
+	def send_mi_command(self,command):
+		self.send_to_gdb('g',command)
+		time.sleep(0.3)
+		gdb_output = self.read_gdb_output(self.p).replace(GDB_PROMPT,'')
+		print "mi-output:",gdb_output
+		output = mi_parser.process(gdb_output+'\n').__dict__
+		return output
+		
+	def get_program_status(self):
+		MAX_FRAMES = 10
+		# first, get the arguments for each frame
+		#    -stack-list-arguments 1 0 MAX_FRAMES
+		#    (the "1" is to "show values")
+		all_output = []
+		all_output.append(self.send_mi_command('-stack-list-arguments 1 0 '+str(MAX_FRAMES)))
+				
+		# next, get each function name and line number
+		#    -stack-list-frames 0 MAX_FRAMES
+		frames = self.send_mi_command('-stack-list-frames 0 '+str(MAX_FRAMES))
+		all_output.append(frames)
+		if frames['class_'] == 'done': # success
+			frame_count = len(frames['result']['stack'])
+			# walk through all frames (!) to get the local variables
+			#    we first have to change to each frame
+			#    -stack-select-frame framenum
+			frame_output = []
+			for i in range(frame_count):
+				self.send_mi_command('-stack-select-frame ')
+				# now, we can list all the local variables
+				#    -stack-list-locals --simple-values
+				frame_output.append(self.send_mi_command('-stack-list-locals --simple-values'))
+			all_output.append(frame_output)
+	
+		return {'gdb':all_output}
+
+		# return status for use on web page
+		return {'error':"no command"}
+		
 	def send_to_gdb(self,cmd_type,command):
 		try:
 			# command can be to either gdb or to the program, and
@@ -185,11 +242,11 @@ class Gdb_session:
 
 		return {'gdb':gdb_output,'console':prog_output}
 	
-	def get_program_status(self):
-		# first, send "where", and return that as where
-		# next, send "info args," and return the arguments
-		# finally, send "info locals," and return the local variables
-		pass
+	def get_console_output(self):
+		# read console output
+		prog_output = self.read_prog_output(self.program_fd)
+		return {'gdb':'','console':prog_output}
+	
 class Gdb_sessions:
 	def __init__(self):
 		self.sessions = {}
@@ -219,6 +276,14 @@ class Gdb_sessions:
 			if session.send_to_gdb('c',data) == 'ok':
 				time.sleep(0.3) # wait for processing
 				return session.get_output()
+		elif command == 'get_all_output':
+			return session.get_output()
+		elif command == 'get_console_output':
+			return session.get_console_output()
+		elif command == 'run':
+			session.clear_breakpoints()
+			session.send_to_gdb('g','continue')
+			return session.get_output()
 		elif command == 'status':
 			# get the program status
 			return session.get_program_status()
@@ -297,6 +362,7 @@ def handle_connection(gs,connection,address):
 	response = json.dumps(response)
 	print response
 	msg_len = len(response)
+	print "msg_len:",msg_len
 	# first send the 4-byte length, big-endian
 	connection.send(chr(msg_len >> 24))
 	connection.send(chr((msg_len & 0xFF0000) >> 16))

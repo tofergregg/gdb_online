@@ -10,7 +10,7 @@ function init() {
   editor.clearHighlights();
   editor.highlight(1,"Blue");
   document.getElementById("next").disabled=true;
-  //document.getElementById("run").disabled=true;
+  document.getElementById("run").disabled=true;
   
   // set up canvas
   var canvas = document.getElementById("drawingArea");
@@ -68,18 +68,19 @@ function guid() {
 function startSpinner(){
 	gdb_spinner = new Spinner(spinnerOpts).spin(document.getElementById('codeText'));
 	document.getElementById("next").disabled=true;
-	//document.getElementById("run").disabled=true;
+	document.getElementById("run").disabled=true;
 }
 
 function stopSpinner(){
-	gdb_spinner.stop();
+	if (typeof gdb_spinner !== 'undefined') gdb_spinner.stop();
 	document.getElementById("next").disabled=false;
-	//document.getElementById("run").disabled=false;
+	document.getElementById("run").disabled=false;
 }
 
 function compileProg() {
   console.log("Compiling...");
   startSpinner();
+  prog_console.resetNewText();
   sendGdbMsg('compile',editor.getCode(),compileResult)  // post the program to be compiled
 }
 
@@ -88,12 +89,42 @@ function compileResult(response){
 	if (response['returncode']==0) {
   		console.log("No compilation errors.");
   		stopSpinner();
-  		startRunning();
+  		startStepping();
   	}
   	else {
   		console.log("Compilation errors, see console.");
   		prog_console.setCode(prog_console.getCode()+response['output'])
+  		prog_console.resetNewText;
   	}
+}
+
+function runProg() {
+	// enable stop button
+	document.getElementById("stop").disabled=false;
+	startSpinner();
+	// TODO: ensure program only runs for a maximum of one minute
+	sendGdbMsg('run','',runResult);
+}
+
+function runResult(response){
+	stopSpinner();
+	// disable stop button
+	document.getElementById("stop").disabled=true;
+	consoleUpdate();
+}
+
+// this function will query gdb every three seconds to see if there is any output from the console
+function consoleUpdate(){
+	// send a blank gdb_command, which will return the console output as well
+	sendGdbMsg('get_console_output','',consoleResponse);
+	updateProgramState('');
+	consoleUpdate.timer = setTimeout(consoleUpdate,3000);
+}
+
+function consoleResponse(result){
+	console.log('Updating console...');
+	consoleResponse.res = result;
+	prog_console.setCode(prog_console.getCode()+result['console'])
 }
 
 function updateWindows(response){
@@ -108,9 +139,11 @@ function updateWindows(response){
   			updateProgramState(response['gdb']);
   			// update console, but only if it was a gdb_command (to 
   			// avoid duplicating console input)
-  			if (response['command'] != 'console_command') {
-  				prog_console.setCode(prog_console.getCode()+response['console'])
-  			}
+  			//if (response['command'] != 'console_command') {
+  				prog_console.setCode(prog_console.currentCode+response['console']);
+  				prog_console.resetNewText;
+  				
+  			//}
   		}
 }
 
@@ -130,7 +163,9 @@ function sendGdbMsg(command,data_val,next_func){
 			console.log(data);
   		}
   		else {
+  			console.log("data recd:"+data);
 			var response=JSON.parse(data);
+			// add command to response for handling
 			response['command']=command;
 			// handle gdb output
 			next_func(response);
@@ -138,7 +173,7 @@ function sendGdbMsg(command,data_val,next_func){
   	});
 }
 
-function startRunning(){
+function startStepping(){
   console.log("Starting program...");
   // run the program in gdb
   startSpinner();
@@ -152,22 +187,40 @@ function nextStep(){
 
 function updateProgramState(gdb_msg){
 	console.log("orig msg:"+gdb_msg);
-	// send "where full" command to gdb to find line, args, and locals
-	sendGdbMsg('gdb_command','where full', function(response) {
-			console.log("where response:"+response['gdb']);
-			if (response['gdb'].match('No stack.')) {
+	// send status command to gdb to find line, args, and locals
+	sendGdbMsg('status','', function(response) {
+			console.log("status response:"+response['gdb']);
+			resp=response['gdb'];
+			prog_args = response['gdb'][0] // arguments for all frames
+			prog_frames = response['gdb'][1] // all frames
+			prog_locals = response['gdb'][2] // array of frames with local vars
+			
+			if (prog_args.class_ === 'error') {
 				// restart and go to line 1 (but allow "run")
 				document.getElementById("next").disabled=true;
+				document.getElementById("run").disabled=true;
+				document.getElementById("stop").disabled=true;
 				editor.clearHighlights();
 				updateProgramState.lineNum=1;
 				editor.highlight(updateProgramState.lineNum,"Blue");
 				clearDrawing();
+				if(typeof consoleUpdate.timer != 'undefined') {
+					clearInterval(consoleUpdate.timer);
+				}
 			}
-			else if (response['gdb']=='') return; // possibly waiting for program input
 			else {
-				parseWhereFull(response['gdb']);
+				parse_status(prog_args.result.stack-args,prog_frames.result.stack,prog_locals);
 			}
 		});
+}
+
+function parse_status(prog_args,prog_frames,prog_locals) {
+	parse_status.stack_frames = [];
+	{
+		// prog_args is a 
+		parse_status.stack_frames.push({'function':func,'args':args,'line_num':line_num,'locals':locals});
+	}
+	draw_stack(parse_status.stack_frames);
 }
 
 function parse_func_name(line){
@@ -260,6 +313,7 @@ function parse_local(line){
 	//console.log(line_sp);
 	return {'var':line_sp[0],'value':line_sp[1]}; // this should be something like {'arg':'num','value':'42'}
 }
+
 function parseWhereFull(text){
 	// example output from "where full":
 	// #0  square (x=3) at /tmp/programs/cdcc5e52-2bda-8d9f-6062-5d1204406d1b.cpp:16
@@ -402,6 +456,7 @@ function draw_stack(stack_frames) {
 
 function clearConsole() {
 	prog_console.setCode("");
+	prog_console.resetNewText();
 }
 
 function size(width,height) {

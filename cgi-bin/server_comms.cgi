@@ -9,7 +9,8 @@ cgitb.enable()
 SERVER_ADDR = '130.64.23.165' # homework.cs.tufts.edu (dell24)
 #SERVER_ADDR = '10.3.14.148' # xubuntu
 PORT_NUM = 55444
-BUF_LEN = 2048
+BUF_LEN = 1024
+BUF_MAX = 10240 # only allow up to 10KB to transfer per request, in case of runaway program
 
 if __name__ == "__main__":
 	form = cgi.FieldStorage()
@@ -30,6 +31,8 @@ if __name__ == "__main__":
 	    command=sys.argv[2]
 	    data=sys.argv[3]
 
+	# truncate data to 10KB if necessary
+	data = data[:BUF_MAX]
 	full_msg={'uuid':uuid,'command':command,'data':data}
            
 	cs = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -59,15 +62,16 @@ if __name__ == "__main__":
 		     ord(bytes_left_str[1]) << 16 |
 		     ord(bytes_left_str[2]) << 8  |
 		     ord(bytes_left_str[3]))
-	
+	tot_bytes = bytes_left
 	# now receive the rest of the message, in 1KB chunks
 	full_msg = ""
 	while bytes_left > 0:
 		if bytes_left < BUF_LEN:
-			full_msg += cs.recv(bytes_left)
+			data_recd = cs.recv(bytes_left)
 		else:
-			full_msg += cs.recv(BUF_LEN)
-		bytes_left -= BUF_LEN
+			data_recd = cs.recv(BUF_LEN)
+		bytes_left -= len(data_recd)
+		full_msg += data_recd
 		
 	cs.close()
 	print "Content-type:text/html"

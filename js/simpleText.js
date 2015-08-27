@@ -185,33 +185,62 @@ function SimpleTextNoLineNumbers(appendTo) {
 	row.style.width = '100%';
 	row.appendChild(cell);
 	appendTo.appendChild(row);
-
 	
-	var ta = this.textarea;
-	var ln = this.linenumbers;
-	this.textarea.onkeyup = function(event) {
-		if (event && event.keyCode == 13 && event.currentTarget) { // return key
+	this.resetNewText = function(){
+		this.newText = {'loc':0,'text':''};
+	}
+	this.textarea.onkeypress = function(event) {
+		// add key to array, until return, then send
+		console.log("keypress");
+		var owner = event.currentTarget.owner;
+		if (event && event.keyCode != 13 && event.currentTarget) {
+			var t = owner.newText['text'];
+			var loc = owner.newText['loc'];
+			owner.newText['text']=[t.slice(0,loc),String.fromCharCode(event.keyCode),t.slice(loc)].join('');
+			owner.newText['loc']+=1;
+		}
+		else if (event && event.keyCode == 13 && event.currentTarget) { // return key
 			// send to gdb as program input
 			// just send the new text
-			ta = event.currentTarget;
-			var newText = ta.owner.getCode().slice(ta.owner.currentCode.length)
-			sendGdbMsg('console_command',newText,updateWindows)
+			//var ta = event.currentTarget;
+			sendGdbMsg('console_command',owner.newText['text'],updateWindows);
+			owner.resetNewText;
 		}
-		/*if (event && event.currentTarget)
-			ta = event.currentTarget;
-		if (ta.owner)
-			ln = ta.owner.linenumbers
-		var text = ta.owner.getCode();
-		var bits = text.split('\n').length;
-		while (ln.childNodes.length > bits) 
-			ln.removeChild(ln.lastChild);
-		while (ln.childNodes.length < bits) {
-			var div = document.createElement("div");
-			div.style.backgroundColor="#EEEEEE";
-			div.style.color="#AAAAAA";
-			div.appendChild(document.createTextNode(String(ln.childNodes.length+1)));
-			ln.appendChild(div);
-		}*/
+	}
+	this.textarea.onkeydown = function(event) {
+		// only allow backspace and left/right arrow keys
+		var owner = event.currentTarget.owner;
+		
+		// up/down
+		if (event.keyCode == 38 ||
+		    event.keyCode == 40) {
+			event.preventDefault();
+		}
+		else if (event.keyCode == 37) { // left
+			if (owner.newText['loc']>0) owner.newText['loc']--;
+		}
+		else if (event.keyCode == 39) { // right
+			if (owner.newText['loc']<owner.newText['text'].length) {
+				owner.newText['loc']++;
+			}
+		}
+		else if (event.keyCode == 8) { // backspace
+			if (owner.newText['loc'] > 0) {
+				var t = owner.newText['text'];
+				var loc = owner.newText['loc'];
+				owner.newText['text']=[t.slice(0,loc-1),t.slice(loc)].join('');
+				owner.newText['loc']--;
+			}
+			else {
+				event.preventDefault(); // don't let the user delete other stuff
+			}
+		}
+		//console.log(event.keyCode);
+		
+	}
+	this.textarea.onmousedown = function(event) {
+		// don't let user screw around with the cursor location with the mouse
+		event.preventDefault();
 	}
 	this.getCode = function() {
 		var text = htmlToText(this.textarea.innerHTML);
@@ -234,8 +263,9 @@ function SimpleTextNoLineNumbers(appendTo) {
 			text = text.replace(/\n/g,'<br>') + '<br>';
 		}
 		this.textarea.innerHTML = text;
-		this.textarea.onkeyup();
+		//this.textarea.onkeypress();
 		this.currentCode=this.getCode();
+		this.setEndOfContenteditable(this.textarea);
 	}
 	this.enable = function() {
 		this.setCode(this.getCode());
@@ -249,7 +279,28 @@ function SimpleTextNoLineNumbers(appendTo) {
 		this.textarea.style.backgroundColor = 'LightGrey';
 		this.textarea.style.color = 'grey';
 	}
+	this.setEndOfContenteditable = function (contentEditableElement)
+	{
+	    var range,selection;
+	    if(document.createRange)//Firefox, Chrome, Opera, Safari, IE 9+
+	    {
+		range = document.createRange();//Create a range (a range is a like the selection but invisible)
+		range.selectNodeContents(contentEditableElement);//Select the entire contents of the element with the range
+		range.collapse(false);//collapse the range to the end point. false means collapse to end rather than the start
+		selection = window.getSelection();//get the selection object (allows you to change selection)
+		selection.removeAllRanges();//remove any selections already made
+		selection.addRange(range);//make the range you have just created the visible selection
+	    }
+	    else if(document.selection)//IE 8 and lower
+	    { 
+		range = document.body.createTextRange();//Create a range (a range is a like the selection but invisible)
+		range.moveToElementText(contentEditableElement);//Select the entire contents of the element with the range
+		range.collapse(false);//collapse the range to the end point. false means collapse to end rather than the start
+		range.select();//Select the range (make it the visible selection
+	    }
+	}
 
 	this.enable();
 	this.setCode('');
+	this.resetNewText();
 }
