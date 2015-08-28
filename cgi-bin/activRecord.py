@@ -43,6 +43,7 @@ class Gdb_session:
 		self.send_command(self.p,'set listsize 10000')
 		self.send_command(self.p,'set pagination off')
 		self.send_command(self.p,'set confirm off')
+		self.send_command(self.p,'-gdb-set target-async on')
 		
 		# redefine shell to a blank function to be safer
 		self.send_command(self.p,'define shell')
@@ -57,7 +58,7 @@ class Gdb_session:
 		self.send_command(self.p,'tty '+program_pts)
 
 		# start running program
-		self.send_command(self.p,'run')
+		self.send_command(self.p,'run&')
 		
 		# it looks like the next line is going to cause too-slow behavior
 		#self.send_command(self.p,'target record-full') # record for stepping backwards
@@ -65,7 +66,8 @@ class Gdb_session:
 		#   if "where full" produces one fewer stack frame than the previous
 		#   "where full," then we can do a "reverse-next" and then a "finish"
 		#   command to retrieve the return value for the function.
-		time.sleep(3) # wait a bit
+		time.sleep(1) # wait a bit
+		self.read_gdb_output(self.p) #ignore
 
 	def send_command(self,proc,cmd):
 		proc.stdin.write(cmd+'\n')
@@ -143,6 +145,8 @@ class Gdb_session:
 		
 	def clear_breakpoints(self):
 		self.send_command(self.p,'delete')
+		time.sleep(0.3)
+		self.read_gdb_output(self.p) #ignore
 
 	def set_pty_for_gdb(self):
 		# sets up a pseudo-terminal that GDB can write to and read from
@@ -178,10 +182,15 @@ class Gdb_session:
 
 	def send_mi_command(self,command):
 		self.send_to_gdb('g',command)
+		print "mi-command:",command
 		time.sleep(0.3)
 		gdb_output = self.read_gdb_output(self.p).replace(GDB_PROMPT,'')
 		print "mi-output:",gdb_output
-		output = mi_parser.process(gdb_output+'\n').__dict__
+		try:
+			output = mi_parser.process(gdb_output+'\n').__dict__
+		except:
+			# give up if we can't parse the output
+			return None
 		return output
 		
 	def get_program_status(self):
@@ -190,11 +199,16 @@ class Gdb_session:
 		#    -stack-list-arguments 1 0 MAX_FRAMES
 		#    (the "1" is to "show values")
 		all_output = []
-		all_output.append(self.send_mi_command('-stack-list-arguments 1 0 '+str(MAX_FRAMES)))
+		output = self.send_mi_command('-stack-list-arguments 1 0 '+str(MAX_FRAMES))
+		if output == None:
+			return {'error':'no output'}
+		all_output.append(output)
 				
 		# next, get each function name and line number
 		#    -stack-list-frames 0 MAX_FRAMES
 		frames = self.send_mi_command('-stack-list-frames 0 '+str(MAX_FRAMES))
+		if frames == None:
+			return {'error':'no output'}
 		all_output.append(frames)
 		if frames['class_'] == 'done': # success
 			frame_count = len(frames['result']['stack'])
@@ -203,7 +217,7 @@ class Gdb_session:
 			#    -stack-select-frame framenum
 			frame_output = []
 			for i in range(frame_count):
-				self.send_mi_command('-stack-select-frame ')
+				self.send_mi_command('-stack-select-frame '+str(i))
 				# now, we can list all the local variables
 				#    -stack-list-locals --simple-values
 				frame_output.append(self.send_mi_command('-stack-list-locals --simple-values'))
@@ -352,6 +366,7 @@ def handle_connection(gs,connection,address):
 	print "\tuuid:",full_msg['uuid']
 	print "\tcommand:",full_msg['command']
 	print "\tdata:",full_msg['data']
+	print "\ttimestamp:",full_msg['timestamp']
 
 	if full_msg['command']=='compile':
 		response = compile(full_msg['uuid'],full_msg['data'])
@@ -360,7 +375,10 @@ def handle_connection(gs,connection,address):
 						full_msg['command'],
 						full_msg['data'])
 	response = json.dumps(response)
-	print response
+	try:
+		print response
+	except IOError as e:
+		print "...cannot print all output..."
 	msg_len = len(response)
 	print "msg_len:",msg_len
 	# first send the 4-byte length, big-endian

@@ -191,7 +191,7 @@ function SimpleTextNoLineNumbers(appendTo) {
 	}
 	this.textarea.onkeypress = function(event) {
 		// add key to array, until return, then send
-		console.log("keypress");
+		//console.log("keypress");
 		var owner = event.currentTarget.owner;
 		if (event && event.keyCode != 13 && event.currentTarget) {
 			var t = owner.newText['text'];

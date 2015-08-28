@@ -22,18 +22,20 @@ if __name__ == "__main__":
 	    	data=form['data'].value
 	    else:
 	    	data = ''
+	    timestamp=form['timestamp'].value
 	except KeyError:
-	    if len(sys.argv) != 4:
+	    if len(sys.argv) != 5:
 	    	print "Content-type:text/html\n" 
-	    	print "Usage: server_comms.py [uuid] [command] [data]"
+	    	print "Usage: server_comms.py [uuid] [command] [data] [timestamp]"
 	    	sys.exit(-1)
 	    uuid=sys.argv[1]
 	    command=sys.argv[2]
 	    data=sys.argv[3]
+	    timestamp=sys.argv[4]
 
 	# truncate data to 10KB if necessary
 	data = data[:BUF_MAX]
-	full_msg={'uuid':uuid,'command':command,'data':data}
+	full_msg={'uuid':uuid,'command':command,'data':data,'timestamp':timestamp}
            
 	cs = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	cs.connect((SERVER_ADDR,PORT_NUM))

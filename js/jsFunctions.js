@@ -15,7 +15,7 @@ function init() {
   // set up canvas
   var canvas = document.getElementById("drawingArea");
   canvas.height = 580;
-  canvas.width = 500;
+  canvas.width = 560;
   var ctx = canvas.getContext("2d");
   //ctx.fillStyle = "#00FF00";
   //ctx.fillRect(2, 0, 496, 580);
@@ -149,8 +149,12 @@ function updateWindows(response){
 
 function sendGdbMsg(command,data_val,next_func){
   // sends a command to gdb and then calls next_func with the result
-  $.post("cgi-bin/server_comms.cgi",{'uuid':my_guid,'command':command,'data':data_val},
+  console.log("SENDING GDB MSG:\n\tcommand:"+command+"\n\tdata_val:"+data_val+"\n\tnext_func:"+next_func.name);
+  var timestamp = Date.now();
+  console.log("Timestamp:"+timestamp);
+  $.post("cgi-bin/server_comms.cgi",{'uuid':my_guid,'command':command,'data':data_val,'timestamp':timestamp},
   	function(data){
+		console.log("Back from call, timestamp:"+timestamp);
   		sendGdbMsg.data = data;
   		stopSpinner();
   		if (data.match("A problem occurred in a Python script.")) {
@@ -189,201 +193,67 @@ function updateProgramState(gdb_msg){
 	console.log("orig msg:"+gdb_msg);
 	// send status command to gdb to find line, args, and locals
 	sendGdbMsg('status','', function(response) {
-			console.log("status response:"+response['gdb']);
-			resp=response['gdb'];
-			prog_args = response['gdb'][0] // arguments for all frames
-			prog_frames = response['gdb'][1] // all frames
-			prog_locals = response['gdb'][2] // array of frames with local vars
-			
-			if (prog_args.class_ === 'error') {
-				// restart and go to line 1 (but allow "run")
-				document.getElementById("next").disabled=true;
-				document.getElementById("run").disabled=true;
-				document.getElementById("stop").disabled=true;
-				editor.clearHighlights();
-				updateProgramState.lineNum=1;
-				editor.highlight(updateProgramState.lineNum,"Blue");
-				clearDrawing();
-				if(typeof consoleUpdate.timer != 'undefined') {
-					clearInterval(consoleUpdate.timer);
-				}
+		if (typeof(response.error) != 'undefined') {
+			console.log('Error on update: '+response.error);
+			return;
+		}
+		console.log("status response:"+response['gdb']);
+		resp=response['gdb'];
+		prog_args = response['gdb'][0] // arguments for all frames
+		prog_frames = response['gdb'][1] // all frames
+		prog_locals = response['gdb'][2] // array of frames with local vars
+		
+		if (prog_args.class_ === 'error') {
+			console.log("Resetting program.");
+			// restart and go to line 1 (but allow "run")
+			document.getElementById("next").disabled=true;
+			document.getElementById("run").disabled=true;
+			document.getElementById("stop").disabled=true;
+			editor.clearHighlights();
+			updateProgramState.lineNum=1;
+			editor.highlight(updateProgramState.lineNum,"Blue");
+			clearDrawing();
+			if(typeof consoleUpdate.timer != 'undefined') {
+				clearInterval(consoleUpdate.timer);
 			}
-			else {
-				parse_status(prog_args.result.stack-args,prog_frames.result.stack,prog_locals);
+		}
+		else {
+			// convert prog_locals to a better array
+			var p_locals = []
+			for (var i=0;i<prog_locals.length;i++) {
+				p_locals.push(prog_locals[i].result.locals);
 			}
-		});
+			parse_status(prog_args.result['stack-args'],prog_frames.result.stack,p_locals);
+		}
+	});
 }
 
 function parse_status(prog_args,prog_frames,prog_locals) {
+	p_args = prog_args; p_frames=prog_frames; p_locals=prog_locals;
 	parse_status.stack_frames = [];
-	{
-		// prog_args is a 
+	for (var i=0;i<prog_frames.length;i++) { // will go through all frames	
+		// prog_args is an array of frame dicts, 'frame':{"args":[], "level":"0"}
+		// prog_frames is an array of frames, 'frame':{'func':func_name, 'line':lineNo}
+		// prog_locals is an array of local variables, each array index
+		//       corresponds to the frame
+		func = prog_frames[i].frame.func;
+		args = prog_args[i].frame.args;
+		locals = prog_locals[i];
+		line_num = prog_frames[i].frame.line;
+		// update line number in window
+		if (parseInt(prog_frames[i].frame.level)==0) { // this is the current function
+			// update highlighting
+			editor.clearHighlights();
+  			editor.highlight(line_num,"Blue");
+		}
+		// convert args
 		parse_status.stack_frames.push({'function':func,'args':args,'line_num':line_num,'locals':locals});
 	}
 	draw_stack(parse_status.stack_frames);
 }
 
-function parse_func_name(line){
-	// function name should be "#d.*  name ("
-	// but it could read: #1  0x0000000000400947 in main ()
-	var func_full = line.match(/^#\d+  .* \(/);
-	
-	// if " in " remains, get rid of it.
-	if (func_full[0].match(/ in /)) {
-		func = func_full[0].replace(/^.* in /,"");
-		func = func.replace(/ \($/,"");
-	}
-	else {
-		// remove all the way to the function name
-		var func = func_full[0].split(" ")[2];
-	}
-	// return the function name and the rest of the line after the function name and space
-	return [func,line.slice(func_full[0].length)];
-}
-
-function parse_arguments(line){
-	// arguments should be a comma separated list followed by a right parenthesis
-	// Beware: must parse individual letters and look for strings with (possibly)
-	// escaped quotation marks.
-	// e.g.: s="abc,)\"def", x=4) at
-	var all_args = []
-	var orig_line = line
-	var done_with_args = false;
-	
-	while (!done_with_args) {
-		var arg_name="",arg_value="";
-		line_sp = line.split('=');
-		if (line_sp == line) break; // no more args
-		arg_name = line_sp[0];
-		// truncate the rest of the line after the equals sign
-		line = line.slice(arg_name.length+1)
-		//console.log("rest of line:"+line);
-		
-		// look through each character, and add to arg_value
-		// arg value will be complete at a comma, but
-		// we must include a string, which could have commas
-		var char_index = 0;
-		var in_quote = false;
-		var last_char = ""
-		
-		while (true) {
-			c = line[char_index];
-			if (!in_quote && c==')') { // done with all args!
-				done_with_args = true;
-				break;
-			}
-			if (!in_quote && c==',') break; // done with this arg!
-			arg_value+=c;
-			if (c=='"') {
-				if (last_char != '\\') { // not an escaped quote
-					in_quote=!in_quote;
-				}
-			}
-			last_char = c;
-			char_index++;
-		}
-		all_args.push({'arg':arg_name,'value':arg_value})
-		line = line.slice(char_index+2); // discard the comma and space
-	}
-	//console.log(all_args);
-	
-	// return the args and the rest of the line after the function name and space
-	return[all_args,line.slice(char_index)];
-}
-
-function parse_line_num(text){
-	// line will end with a colon and the line number
-	text_sp = text.split(':');
-	line_num = parseInt(text_sp[text_sp.length-1])
-	if (isNaN(line_num)) return -1;
-	return line_num;
-}
-
-function parse_local(line){
-	line = line.replace(/^ */,""); // remove leading spaces
-	line_sp = line.split(/=(.+)?/); // split on first equals sign
-	line_sp[0] = line_sp[0].replace(/ $/,""); // remove trailing space
-	line_sp[1] = line_sp[1].replace(/^ /,""); // remove leading space
-	
-	// gdb sometimes can't grab the value, so it gives an error, which begins with "<"
-	if (line_sp[1][0] == "<") {
-		line_sp[1]="<?>";
-	}
-	line_sp.pop(); // there will be an extra element at the end that we don't need
-	//console.log(line_sp);
-	return {'var':line_sp[0],'value':line_sp[1]}; // this should be something like {'arg':'num','value':'42'}
-}
-
-function parseWhereFull(text){
-	// example output from "where full":
-	// #0  square (x=3) at /tmp/programs/cdcc5e52-2bda-8d9f-6062-5d1204406d1b.cpp:16
-	// No locals.
-	// #1  0x0000000000400947 in main () at /tmp/programs/cdcc5e52-2bda-8d9f-6062-5d1204406d1b.cpp:10
-	//         num = 3
-	//         result = 4.59163468e-41
-	// (gdb) 
-	lines = text.split('\n');
-	parseWhereFull.stack_frames = []
-	
-	// loop through stack frames
-	line_index = 0; // the first line of text
-	while (true) {
-		var func, args, locals=[], rest_of_line;
-		
-		// first line should be #0, and contain the function and parameters
-		line = lines[line_index];
-		//console.log("line text:"+line);
-		
-		// if the line doesn't start with a hash, we're done
-		if (line[0] != "#") break;
-		
-		var ret_arr = parse_func_name(line);
-		func=ret_arr[0];
-		rest_of_line = ret_arr[1];
-		
-		ret_arr = parse_arguments(rest_of_line);
-		args=ret_arr[0];
-		rest_of_line = ret_arr[1];
-		
-		line_num = parse_line_num(rest_of_line);
-		
-		console.log("function: "+func);
-		console.log("args:");
-		for (key in args) {
-			console.log("\t"+args[key]['arg']+":"+args[key]['value']);
-		}
-		console.log("line number: "+line_num);
-		if (line_index==0) { // this is the current function
-			// update highlighting
-			editor.clearHighlights();
-  			editor.highlight(line_num,"Blue");
-		}
-		
-		line_index++;
-		
-		// next lines will be local variables
-		line = lines[line_index];
-		if (line.match("No locals.")) { // no local variables
-			line_index++;
-		}
-		else {
-			// the next lines will all start with a bunch of spaces, then the variable name
-			while (line[0] == " ") {
-				locals.push(parse_local(line))
-				line_index++;
-				line = lines[line_index];
-			}
-		}
-		console.log("locals:");
-		for (key in locals) {
-			console.log("\t"+locals[key]['var']+":"+locals[key]['value']);
-		}
-		parseWhereFull.stack_frames.push({'function':func,'args':args,'line_num':line_num,'locals':locals});
-	}
-	draw_stack(parseWhereFull.stack_frames);
-}
-
 function draw_stack(stack_frames) {
+	sf = stack_frames;
 	// draw the stack frame on the canvas
 	var canvas = document.getElementById("drawingArea");
 	var ctx = canvas.getContext("2d");
@@ -419,7 +289,7 @@ function draw_stack(stack_frames) {
       		var all_args="args: ";
       		for (var j in frame['args']) {
       			arg=frame['args'][j];
-      			all_args+=arg['arg']+':'+arg['value']+", ";
+      			all_args+=arg['name']+':'+arg['value']+", ";
       		}
       		text_width = ctx.measureText(all_args).width;
       		if (text_width > max_text_width)
@@ -432,7 +302,7 @@ function draw_stack(stack_frames) {
       		var all_locals="locals: ";
       		for (var j in frame['locals']) {
       			local=frame['locals'][j];
-      			all_locals+=local['var']+':'+local['value']+", ";
+      			all_locals+=local['name']+':'+local['value']+", ";
       		}
       		text_width = ctx.measureText(all_locals).width;
       		if (text_width > max_text_width)
