@@ -9,6 +9,7 @@ import socket
 import json
 import threading
 import mi_parser
+import traceback
 
 BUF_LEN = 1024
 IP_ADDR = "130.64.23.165"
@@ -368,13 +369,17 @@ def handle_connection(gs,connection,address):
 	print "\tdata:",full_msg['data']
 	print "\ttimestamp:",full_msg['timestamp']
 
-	if full_msg['command']=='compile':
-		response = compile(full_msg['uuid'],full_msg['data'])
-	else:
-		response = gs.send_command_to_session(full_msg['uuid'],
-						full_msg['command'],
-						full_msg['data'])
-	response = json.dumps(response)
+	try:
+		if full_msg['command']=='compile':
+			response = compile(full_msg['uuid'],full_msg['data'])
+		else:
+			response = gs.send_command_to_session(full_msg['uuid'],
+							full_msg['command'],
+							full_msg['data'])
+		response = json.dumps(response)
+	except Exception, err:
+		print(traceback.format_exc())
+		response = json.dumps({'error':'Python backend crashed.'})
 	try:
 		print response
 	except IOError as e:

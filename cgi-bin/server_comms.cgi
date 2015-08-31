@@ -38,6 +38,7 @@ if __name__ == "__main__":
 	full_msg={'uuid':uuid,'command':command,'data':data,'timestamp':timestamp}
            
 	cs = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	cs.settimeout(15) # timeout of 15 seconds
 	cs.connect((SERVER_ADDR,PORT_NUM))
 	
 	full_json = json.dumps(full_msg)
