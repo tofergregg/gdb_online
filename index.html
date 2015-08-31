@@ -20,6 +20,7 @@
 <button id="run" disabled="true" onclick="runProg()">Run</button>
 <button id="stop" disabled="true" onclick="stopProg()">Stop</button>
 <select id="selectBox" onchange="load_prog_from_select();">
+  <option value="no_select">--Select Program--</option>
   <option value="square">Square</option>
   <option value="mult_test_1">Multiplication Example 1</option>
   <option value="mult_test_2">Multiplication Example 2</option>
@@ -38,7 +39,7 @@
 <div id="code_window" style="overflow:auto;"><span id="codeText" class="smallcaps">Code</span></div><!-- #node5 end -->
 <script>
 var editor = new SimpleText(document.getElementById("code_window"));
-load_prog('square');
+//load_prog('square');
 </script>
 <div id="prog_console" style="overflow:auto;"><span class="smallcaps">Console<br></span>
 <button id="clearConsole" onclick="clearConsole()">Clear</button>
