@@ -221,7 +221,7 @@ class Gdb_session:
 				self.send_mi_command('-stack-select-frame '+str(i))
 				# now, we can list all the local variables
 				#    -stack-list-locals --simple-values
-				frame_output.append(self.send_mi_command('-stack-list-locals --simple-values'))
+				frame_output.append(self.send_mi_command('-stack-list-locals --all-values'))
 			all_output.append(frame_output)
 	
 		return {'gdb':all_output}
@@ -429,7 +429,7 @@ if __name__ == "__main__":
 	print "Setting up socket server"
 	serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	serversocket.bind((IP_ADDR, PORT_NUM))
-	serversocket.listen(5) # become a server socket, maximum 5 connections
+	serversocket.listen(128) # become a server socket, maximum 128 connections
 	while True:
 	    print "Waiting for new connection..."
 	    connection, address = serversocket.accept()

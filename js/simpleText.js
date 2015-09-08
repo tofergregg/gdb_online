@@ -74,6 +74,7 @@ function SimpleText(appendTo) {
 	this.textarea.owner = this;
 	this.textarea.style.minHeight = '1em';
 	this.textarea.style.minWidth = '2em';
+	this.textarea.spellcheck = "false";
 
 	cell = document.createElement('td'); cell.appendChild(this.linenumbers);
 	cell.style.verticalAlign = 'top';
@@ -149,8 +150,9 @@ function SimpleText(appendTo) {
 	this.enable = function() {
 		this.setCode(this.getCode());
 		this.textarea.contentEditable = true;
-		this.textarea.style.backgroundColor = 'LightYellow';
+		this.textarea.style.backgroundColor = 'LightBlue';
 		this.textarea.style.color = 'Black';
+		this.textarea.spellcheck = "false";
 	}
 	this.disable = function() {
 		this.setCode(this.getCode());
@@ -171,6 +173,7 @@ function SimpleTextNoLineNumbers(appendTo) {
 	this.textarea.owner = this;
 	this.textarea.style.minHeight = '1em';
 	this.textarea.style.minWidth = '2em';
+	this.textarea.spellcheck = 'false';
 
 	cell = document.createElement('td'); //cell.appendChild(this.linenumbers);
 	cell.style.verticalAlign = 'top';
@@ -272,6 +275,7 @@ function SimpleTextNoLineNumbers(appendTo) {
 		this.textarea.contentEditable = true;
 		this.textarea.style.backgroundColor = 'LightBlue';
 		this.textarea.style.color = 'Black';
+		this.textarea.spellcheck = "false";
 	}
 	this.disable = function() {
 		this.setCode(this.getCode());

@@ -1,32 +1,61 @@
 #!/usr/bin/python
 
+
 #
+
 # Copyright (c) 2008 Michael Eddington
+
 #
+
 # Permission is hereby granted, free of charge, to any person obtaining a copy 
+
 # of this software and associated documentation files (the "Software"), to deal
+
 # in the Software without restriction, including without limitation the rights 
+
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
+
 # copies of the Software, and to permit persons to whom the Software is 
+
 # furnished to do so, subject to the following conditions:
+
 #
+
 # The above copyright notice and this permission notice shall be included in	
+
 # all copies or substantial portions of the Software.
+
 #
+
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+
 # SOFTWARE.
+
 #
+
+
 
 # Authors:
+
 #   Frank Laub (frank.laub@gmail.com)
+
 #   Michael Eddington (mike@phed.org)
 
+
+
 # $Id$
+
+
 
 
 import re
@@ -88,6 +117,9 @@ def __private():
 
 		def t_c_string(self, s):
 			r'\".*?(?<![\\\\])\"'
+			#r'"(?:[^"\\]|\\.)*"'
+			#r'"(?:\\.|[^"\\])*"'
+			#r'"(?:[^"\\]|\\.)*"'
 			inner = self.__unescape(s[1:len(s)-1])
 			self.rv.append(Token('c_string', inner))
 
@@ -321,7 +353,8 @@ def __private():
 		def graft(self, dict_):
 			for name, value in dict_.items():
 				name = name.replace('-', '_')
-				if isinstance(value, dict):
+				# don't change anything else so we can jsonify
+				'''if isinstance(value, dict):
 					value = GdbDynamicObject(value)
 				elif isinstance(value, list):
 					x = value
@@ -329,7 +362,7 @@ def __private():
 					for item in x:
 						if isinstance(item, dict):
 							item = GdbDynamicObject(item)
-						value.append(item)
+						value.append(item)'''
 				setattr(self, name, value)
 
 	class GdbMiRecord:
@@ -340,9 +373,10 @@ def __private():
 				if name == 'results':
 					for result in value:
 						if not self.result:
-							self.result = GdbDynamicObject(result)
+							#self.result = GdbDynamicObject(result)
+							# just make a dict for jsonification
+							self.result = dict(result)
 						else:
-							# graft this result to self.results
 							self.result.graft(result)
 				else:
 					setattr(self, name, value)
@@ -411,14 +445,14 @@ if __name__ == '__main__':
 ^running
 '''
 		test6 = '10^done,stack-args={frame={level="0",args={}}},time={wallclock="0.00006",user="0.00004",system="0.00002",start="1210530442.460765",end="1210530442.460825"}\n'
-		test7 = '^done,stack-args=[frame={level="0",args=[]}]'
-
-		run_test(test1)
-		run_test(test2)
-		run_test(test3)
-		run_test(test4)
-		run_test(test5)
-		run_test(test6)
+		
+		test7 = '^done,stack-args=[frame={level="0",args=[{name="s",value="\\"my arg\\""},{name="x",value="4"}]},frame={level="1",args=[]}]'
+		#run_test(test1)
+		#run_test(test2)
+		#run_test(test3)
+		#run_test(test4)
+		#run_test(test5)
+		#run_test(test6)
 		run_test(test7)
 
 	main()

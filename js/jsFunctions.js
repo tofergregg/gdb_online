@@ -66,7 +66,7 @@ function guid() {
 }
 
 function startSpinner(){
-	gdb_spinner = new Spinner(spinnerOpts).spin(document.getElementById('codeText'));
+	gdb_spinner = new Spinner(spinnerOpts).spin(document.getElementById('run_options'));
 	document.getElementById("next").disabled=true;
 	document.getElementById("run").disabled=true;
 }
@@ -186,13 +186,16 @@ function startStepping(){
 
 function nextStep(){
 	console.log("Sending 'next' to gdb");
+	startSpinner();
 	sendGdbMsg('gdb_command','next',updateWindows);
 }
 
 function updateProgramState(gdb_msg){
 	console.log("orig msg:"+gdb_msg);
+	startSpinner();
 	// send status command to gdb to find line, args, and locals
 	sendGdbMsg('status','', function(response) {
+		stopSpinner();
 		if (typeof(response.error) != 'undefined') {
 			console.log('Error on update: '+response.error);
 			return;
@@ -274,7 +277,7 @@ function draw_stack(stack_frames) {
 		var frame = stack_frames[i];
 		var text;
 		// draw function name
-		ctx.fillStyle = 'white';
+		ctx.fillStyle = 'black';
 		ctx.textAlign = 'center';
 		ctx.font = font_pt+'pt Sans-Serif';
 		text = frame['function']+'(), line '+frame['line_num'];
@@ -315,7 +318,7 @@ function draw_stack(stack_frames) {
 		ctx.beginPath();
 		ctx.rect(x_pos-max_text_width/2-5,orig_y-14,max_text_width+10,y_pos-orig_y+20);
 		ctx.lineWidth = 2;
-		ctx.strokeStyle = 'white';
+		ctx.strokeStyle = 'black';
 		ctx.stroke();
 		
 		y_pos-=font_pt+10;
@@ -426,8 +429,8 @@ var spinnerOpts = {
 , fps: 20 // Frames per second when using setTimeout() as a fallback for CSS
 , zIndex: 2e9 // The z-index (defaults to 2000000000)
 , className: 'spinner' // The CSS class to assign to the spinner
-, top: '4%' // Top position relative to parent
-, left: '50%' // Left position relative to parent
+, top: '50%' // Top position relative to parent
+, left: '70%' // Left position relative to parent
 , shadow: false // Whether to render a shadow
 , hwaccel: false // Whether to use hardware acceleration
 , position: 'absolute' // Element positioning

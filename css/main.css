@@ -1,6 +1,6 @@
 .smallcaps {
 	font-variant: small-caps;
-	color:white;
+	color:black;
 }
 
 #activation_records
@@ -11,7 +11,10 @@
 	top: 23px;
 	left: 684px;
 	position: absolute;
-	background-color: #C00000;
+	background-color: #FFFFFF;
+	border-style: solid;
+    	border-width: 1px;
+    	border-color: black;
 }
 #run_options
 {
@@ -21,7 +24,10 @@
 	top: 23px;
 	left: 12px;
 	position: absolute;
-	background-color: #C00000;
+	background-color: #FFFFFF;
+	border-style: solid;
+    	border-width: 1px;
+    	border-color: black;
 }
 #code_window
 {
@@ -31,7 +37,10 @@
 	top: 55px;
 	left: 12px;
 	position: absolute;
-	background-color: #C00000;
+	background-color: #FFFFFF;
+	border-style: solid;
+    	border-width: 1px;
+    	border-color: black;
 }
 #prog_console
 {
@@ -41,7 +50,10 @@
 	top: 423px;
 	left: 12px;
 	position: absolute;
-	background-color: #C00000;
+	background-color: #FFFFFF;
+	border-style: solid;
+    	border-width: 1px;
+    	border-color: black;
 }
 
 textarea{
