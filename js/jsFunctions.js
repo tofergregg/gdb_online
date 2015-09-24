@@ -19,6 +19,12 @@ function init() {
   var ctx = canvas.getContext("2d");
   //ctx.fillStyle = "#00FF00";
   //ctx.fillRect(2, 0, 496, 580);
+  
+  // check for parameters to load a file immediately
+  prog = getURLParameter('prog');
+  if (prog) {
+  	load_prog(prog);
+  }
 }
 function load_prog_from_select() {
 	var selectId = document.getElementById('selectBox');
@@ -35,10 +41,10 @@ function load_prog(prog) {
 	else if (prog=='func_test') {
 		editor.setCode('#include<iostream>\nusing namespace std;\nfloat some_func(string s,float x);\n\nint main() {\n  some_func("my arg",4);\n}\n\nfloat some_func(string s,float x){\n  string s2;\n  cout << "enter a string: ";\n  getline(cin,s2);\n  int y=5;\n  cout << s << s2 << endl;\n  return x * x * y;\n}\n');
 	}
-	else if (prog=='mult_test_1') {
+	else if (prog=='mult-1') {
 		editor.setCode('#include<iostream>\nusing namespace std;\n\nfloat mult5(float x) {\n    return 5 * x;\n}\n\nfloat mult7(float x) {\n    return 7 * x;\n}\n\nint main() {\n    cout << mult5(3) << endl;\n    cout << mult7(3) << endl;\n    return 0;\n}\n');
 	}
-	else if (prog=='mult_test_2') {
+	else if (prog=='mult-2') {
 		editor.setCode('#include<iostream>\nusing namespace std;\n\nfloat mult5(float x) {\n    return 5 * x;\n}\n\nfloat mult7_5(float x) {\n    return 7 * x * mult5(2);\n}\n\nint main() {\n    cout << mult7_5(3) << endl;\n    return 0;\n}\n');
 	}
 	else if (prog=='scope_ex') {
@@ -53,6 +59,20 @@ function load_prog(prog) {
 	else if (prog=='count_up_recurse') {
 		editor.setCode('#include<iostream>\nusing namespace std;\n\nvoid countUp(int count){\n        if (count<0) return;\n        countUp(count-1);\n        cout << count << endl;\n}\nint main(){\n        countUp(3);\n}');
 	}
+	else if (prog=='float_bad') {
+		editor.setCode('#include<iostream>\n#include<iomanip> // to use setprecision\n\nusing namespace std;\n\nint main()\n{\n	float a,b,c;\n	double d,e,f;\n\n	a = 0.1;\n	b = 0.2;\n	c = a + b;\n\n	cout << "Testing floats:" << endl;\n	cout << "a: " << setprecision(20) << a << endl;\n	cout << "b: " << setprecision(20) << b << endl;\n	cout << "c: " << setprecision(20) << c << endl << endl;\n\n	d = 0.1;\n	e = 0.2;\n	f = d + e;\n\n	cout << "Testing doubles:" << endl;\n	cout << "d: " << setprecision(20) << d << endl;\n	cout << "e: " << setprecision(20) << e << endl;\n	cout << "f: " << setprecision(20) << f << endl;\n\n	return 0;\n}\n');
+	}
+	else if (prog=='print_caps') {
+		editor.setCode('#include<iostream>\nusing namespace std;\n\nvoid print_caps(char c);\n\nint main()\n{\n	char my_character;\n	cout << "Type a character: ";\n	cin >> my_character;\n	print_caps(my_character);\n	return 0;\n}\n\n// function that prints a character in uppercase\n// argument: a character\n// returns: nothing (void function)\nvoid print_caps(char c) {\n       cout << (char)toupper(c);\n}\n');
+	}
+	else if (prog=='add-three') {
+		editor.setCode('double addThree(double x, double y, double z)\n{\n    double total = x + y + z;\n    return total;\n}\n\n#include<iostream>\nusing namespace std;\nint main() {\n    double a=5,b=10,c=2;\n    cout << addThree(a,b,c);\n    return 0;\n}\n');
+	}
+}
+
+// borrowed from: http://stackoverflow.com/a/11582513/561677
+function getURLParameter(name) {
+  return decodeURIComponent((new RegExp('[?|&]' + name + '=' + '([^&;]+?)(&|#|;|$)').exec(location.search)||[,""])[1].replace(/\+/g, '%20'))||null
 }
 
 function guid() {
